@@ -1,0 +1,169 @@
+---
+title: "Exercise Sheet 2"
+fontsize: 11pt
+header-includes: \usepackage[german]{babel}
+output:
+  html_document: default
+  pdf_document:
+    highlight: tango
+fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, # -> Should code chunks be displayed in the rendered document?
+                      eval = TRUE, # -> Should R Code Chunks be executed?
+                      warning = FALSE, # -> Warnings should only be set to FALSE at the end of rendering.
+                      message = FALSE) # -> Notes should only be set to FALSE at the end of rendering.
+```
+
+This exercise sheet is an [R Markdown](https://rmarkdown.rstudio.com/) file. To generate an HTML file from it, use the **Knit** button in RStudio.
+
+The *European Soccer Database* contains data on more than 25.000 national football matches from the best European leagues. The aim of this exercise is to present interesting relationships in R using exploratory data analysis and visualization.
+
+First you need to access some tables in the database. To do so, [download the database](https://1drv.ms/u/s!AlrZt1pKHg25gch_i-b1mAbOtWU44Q?e=AMhg1B) and place it in the same folder as this .Rmd file. You can then use the `RSQLite::dbConnect()` function to connect to the database. To access a particular database table and convert it to a `data.frame`, you can use the `tbl_df(dbGetQuery(connection, 'SELECT * FROM table_xyz'))` command as displayed below.
+
+```{r}
+# Load libraries (they need to be installed on the first run via install.packages)
+# You do not need to use these libraries, though
+library(RSQLite)
+library(stringr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(lubridate)
+#install.packages("gridExtra")               # Install gridExtra package
+library("gridExtra")  
+
+# connect to database
+con <- dbConnect(SQLite(), dbname = "database.sqlite")
+
+# table queries
+match <- tbl_df(dbGetQuery(con,"SELECT * FROM Match"))
+league <- tbl_df(dbGetQuery(con,"SELECT * FROM League"))
+```
+
+*Example code for a visualization: Below, you can find a code chunk that contains code to create a basic scatterplot.*
+
+```{r}
+# Example visualization...
+match %>%
+  ggplot(aes(x = home_team_goal, y = away_team_goal)) +
+  geom_point(alpha = 1/50, size = 10)
+```
+
+1.  The first leagues of Spain, England, Germany and Italy are considered the four most attractive football leagues in Europe. In which of the four leagues were the most or the fewest goals scored per game on average?
+
+```{r}
+# Solution for task 1...
+#choose league id
+best_leagues <- league%>%
+  filter(name %in% c("Spain LIGA BBVA","England Premier League","Germany 1. Bundesliga","Italy Serie A"))%>%
+  select(id)
+
+
+#rename id column as league id for performing inner join
+names(best_leagues) <- c("league_id")
+
+
+#perform inner join on match and best_leagues table to obtain all matches played in best_leagues
+best_matches <- inner_join(match,best_leagues , by="league_id")
+
+best_teams_goals <- best_matches%>%
+  group_by(league_id)%>%
+  summarize(avg_goals = mean(home_team_goal+away_team_goal))%>%
+  arrange(avg_goals)
+
+  
+```
+
+2.  In this task, we refer again to the four most attractive European leagues from Task 1. Compare the average and the standard deviation of goals scored per match between the four most attractive European leagues on one side and the remaining leagues on the other side.
+
+```{r}
+# Solution for task 2...
+best_teams_goals <- best_teams_goals%>%
+  mutate(best_matches%>%
+  group_by(league_id)%>%
+  summarize(SD_goals = sd(home_team_goal+away_team_goal)))
+
+
+`%!in%` <- Negate(`%in%`)
+
+other_leagues <- league%>%
+  filter(name %!in% c("Spain LIGA BBVA","England Premier League","Germany 1. Bundesliga","Italy Serie A"))%>%
+  select(id)
+  
+
+names(other_leagues) <- c("league_id")
+
+other_matches <- inner_join(match,other_leagues , by="league_id")
+
+other_teams_goals <- other_matches%>%
+  group_by(league_id)%>%
+  summarize(avg_goals = mean(home_team_goal+away_team_goal), SD_goals = sd(home_team_goal+away_team_goal))
+
+
+
+p <- ggplot(data = best_teams_goals,
+mapping = aes(x = avg_goals,y = SD_goals, fill = factor(league_id)))
+
+p + geom_col()
+
+p2 <- ggplot(data = other_teams_goals,
+mapping = aes(x = avg_goals,y = SD_goals, fill = factor(league_id)))
+
+p2 + geom_col()
+
+
+
+
+
+  
+```
+
+3.  Is there really a home advantage? Use a box plot to show the number of goals scored by home and away teams.
+
+```{r}
+# Solution for task 3...
+
+
+match <- mutate(match, goals = (home_team_goal+away_team_goal))
+
+plot1 <- ggplot(data = match,
+mapping = aes(x = goals, y = home_team_goal)) +
+geom_boxplot()
+
+plot2 <- ggplot(data = match,
+mapping = aes(x = goals, y = away_team_goal)) +
+geom_boxplot()
+
+gridExtra::grid.arrange(plot1, plot2, ncol = 2)
+```
+
+4.  *"All soccer players are fair-weather players!"* Check the assertion with a line chart: Do on average more goals fall per game in the summer months than in the rest of the year?
+
+```{r}
+# Solution for task 4...
+match %>%
+  mutate(month_played = month(as_date(date), label = T)) %>%
+  group_by(month_played)%>%
+  summarize(avg_goals = mean(home_team_goal + away_team_goal)) %>%
+  ggplot(aes(x = month_played, y = avg_goals, group = 1)) + 
+  geom_point() + 
+  geom_line()
+
+```
+
+5.  Use an estimated density function curve AND a QQ-Plot to check whether the `home_team_possession` variable is (approximately) normally distributed.
+
+```{r}
+# Solution for task 5...
+
+```
+
+------------------------------------------------------------------------
+
+Dataset:
+
+-   <https://1drv.ms/u/s!AlrZt1pKHg25gch_i-b1mAbOtWU44Q?e=AMhg1B>\
+    (For database schema and explanation of variables, see: <https://www.kaggle.com/hugomathien/soccer>)
