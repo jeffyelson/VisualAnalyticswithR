@@ -1,0 +1,156 @@
+---
+title: "Exercise Sheet 3"
+fontsize: 11pt
+header-includes: \usepackage[german]{babel}
+output:
+  html_document: default
+  pdf_document:
+    highlight: tango
+fig_caption: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, # -> Sollen Code Chunks im gerenderten Dokument angezeigt werden?
+                      eval = TRUE, # -> Sollen R Code Chunks ausgeführt werden?
+                      warning = FALSE, # -> Warnungen sollten nur am Ende zum Rendern auf FALSE gesetzt werden
+                      message = FALSE) # -> Hinweise sollten nur am Ende zum Rendern auf FALSE gesetzt werden
+```
+
+```{r}
+```
+
+
+```{r}
+# Set up libraries (make sure they are installed, first)
+install.packages("tidyverse")
+install.packages("dbscan")
+install.packages("factoextra")
+install.packages('plyr', repos = "http://cran.us.r-project.org")
+install.packages("knitr ")
+library(tidyverse)
+library(stringr)
+library(magrittr)
+library(cluster)
+library(dbscan)
+library(factoextra)
+library(knitr)
+
+```
+
+1. A school would like to group its pupils according to their performance at two intermediate examinations. It is assumed that there are at least 2 clusters of pupils. Load the file `clustering-student-mat.csv` from the exercise sheet's ZIP archive. The file contains for each of the two exams the number of points scored for a total of 395 students.  
+Perform a $K$-means-Clustering for each $k\in \{2,3,\ldots,8\}$. Display the cluster assignments of the points in a scatter plot. (You may use `kmeans` from package `cluster`/`stats`.)
+
+```{r}
+# Solution of task 1...
+student <- read_csv("clustering-student-mat.csv")
+
+#kmeans(data, number of cluster centers, nstart = random starting assignments)
+k2 <- kmeans(student, centers = 2, nstart = 25)
+k3 <- kmeans(student, centers = 3, nstart = 25)
+k4 <- kmeans(student, centers = 4, nstart = 25)
+k5 <- kmeans(student, centers = 5, nstart = 25)
+k6 <- kmeans(student, centers = 6, nstart = 25)
+k7 <- kmeans(student, centers = 7, nstart = 25)
+k8 <- kmeans(student, centers = 8, nstart = 25)
+
+# plots to compare
+#stand - if TRUE, data is standardized before principal component analysis
+fviz_cluster(k2, geom = "point", data = student, stand = FALSE) + ggtitle("k = 2")
+fviz_cluster(k3, geom = "point",  data = student, stand = FALSE ) + ggtitle("k = 3")
+fviz_cluster(k4, geom = "point",  data = student, stand = FALSE) + ggtitle("k = 4")
+fviz_cluster(k5, geom = "point",  data = student, stand = FALSE) + ggtitle("k = 5")
+fviz_cluster(k6, geom = "point",  data = student, stand = FALSE) + ggtitle("k = 6")
+fviz_cluster(k7, geom = "point",  data = student, stand = FALSE) + ggtitle("k = 7")
+fviz_cluster(k8, geom = "point",  data = student, stand = FALSE) + ggtitle("k = 8")
+
+
+
+
+```
+
+2. Aside from distance-based clustering models, there are also density-based models. However, they depend on input parameters, too, and the parameters can have a strong influence on the outcome. Based on the data from task 1, apply DBSCAN for each $eps\in \{1,5,10\}$, with $eps$ representing the epsilon threshold for density-connectivity. Display the cluster assignments of the points in a scatter plot. (You may use `dbscan` from package `dbscan`.)
+
+```{r}
+# Solution of task 2...
+dbscan_res1 <- dbscan(student, eps = 1, minPts = 10)
+dbscan_res2 <- dbscan(student, eps = 5, minPts = 10)
+dbscan_res3 <- dbscan(student, eps = 10, minPts = 10)
+dbscan_res4 <- dbscan(student, eps = 8, minPts = 10)
+fviz_cluster(dbscan_res1, student, stand = FALSE, frame = FALSE, geom = "point")+ggtitle("eps = 1")
+fviz_cluster(dbscan_res2, student, stand = FALSE, frame = FALSE, geom = "point")+ggtitle("eps = 5")
+fviz_cluster(dbscan_res3, student, stand = FALSE, frame = FALSE, geom = "point")+ggtitle("eps = 10")
+fviz_cluster(dbscan_res4, student, stand = FALSE, frame = FALSE, geom = "point")+ggtitle("eps = 8")
+```
+
+3. For the clustering results from task 1 and 2, use the silhouette coefficient to find the optimal cluster parameters (i.e., for $K$-means the number of clusters $K$, and for DBSCAN the epsilon threshold for density-connectivity $eps$). (You may use `silhouette` from package `cluster`.)
+
+```{r}
+# Solution of task 3...
+avg_sil <- function(k) {
+  clusters <- kmeans(student, centers = k, nstart = 25)
+  ss <- silhouette(clusters$cluster, dist(student))
+  mean(ss[, 3])
+}
+
+# Compute and plot wss for k = 2 to k = 8
+k.values <- 2:8
+
+# extract avg silhouette for 2-8 clusters
+avg_sil_values <- map_dbl(k.values, avg_sil)
+#type b is lines and points plot (b for both)
+plot(k.values, avg_sil_values,
+       type = "b", pch = 19, frame = FALSE, 
+       xlab = "Number of clusters K",
+       ylab = "Average Silhouettes")
+
+
+avg_sil_dbscan <- function(e) {
+  dbscan_res <- dbscan(student, eps = e, minPts = 10)
+  ss_eps <- silhouette(dbscan_res$cluster, dist(student))
+  mean(ss_eps[, 3])
+}
+
+# Compute and plot wss for e = 1 to e = 10
+e.values <- 1:10
+
+avg_sildbscan_values <- map_dbl(e.values, avg_sil_dbscan)
+#pch 19 - solid circle
+
+plot(e.values, avg_sildbscan_values,
+       type = "b", pch = 19, frame = FALSE, 
+       xlab = "Epsilon E",
+       ylab = "Average Silhouettes")
+
+
+```
+
+
+4. The following distance matrix is given. Perform agglomerative hierarchical clustering with  _single_ und _complete_ linkage. Display the result in a dendrogram. The dendrogram should represent the order in which the points are joined. (You may use `hclust` from package `cluster`/`stats`.)
+
+```{r}
+dm <- tribble(~p1,~p2,~p3,~p4,~p5,
+              0.00, 0.02, 0.90, 0.36, 0.53,
+              0.02, 0.00, 0.65, 0.15, 0.24,
+              0.90, 0.65, 0.00, 0.59, 0.45,
+              0.36, 0.15, 0.59, 0.00, 0.56,
+              0.53, 0.24, 0.45, 0.56, 0.00) %>% as.matrix()
+rownames(dm) <- letters[1:5]
+colnames(dm) <- letters[1:5]
+knitr::kable(dm)
+```
+
+```{r}
+# Solution of task 4...
+#as.dist - coerces the object of dm to a distance value
+dm <- as.dist(dm)
+hclust_single <- hclust(dm, method = 'single')
+plot(hclust_single,hang=-1)
+
+dm <- as.dist(dm)
+hclust_complete <- hclust(dm, method = 'complete')
+plot(hclust_complete,hang=-1)
+
+
+```
+
+------
